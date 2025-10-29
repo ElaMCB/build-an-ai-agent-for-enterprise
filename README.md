@@ -70,13 +70,24 @@ pip install -r requirements.txt
 
 4. **Configure environment variables**:
 ```bash
+# Copy the example file
+# On Windows (PowerShell):
+Copy-Item .env.example .env
+
+# On Linux/Mac:
 cp .env.example .env
-# Add your OPENAI_API_KEY to .env
+
+# Then edit .env and add your OPENAI_API_KEY
 ```
 
 5. **Run the application**:
 ```bash
 python run_app.py
+```
+
+Or directly with Streamlit:
+```bash
+streamlit run src/main.py
 ```
 
 ## GitHub Codespaces
@@ -118,7 +129,8 @@ enterprise-ai-agent/
 │   │   └── ticket_tool.py       # Helpdesk integration
 │   └── main.py                  # Streamlit application
 ├── data/
-│   └── policies/                # Sample policy documents
+│   ├── policies/                # Sample policy documents
+│   └── tickets.json             # Created tickets (generated)
 ├── tests/                       # Test suites
 ├── deployment/
 │   └── Dockerfile              # Container configuration
@@ -176,6 +188,30 @@ The application uses environment variables for configuration:
 - `OPENAI_API_KEY`: OpenAI API key for LLM access
 - `LOG_LEVEL`: Application logging level
 - `VECTOR_DB_PATH`: Path for vector database storage
+
+## Demo Instructions
+
+1. **Set up your environment**:
+   - Create `.env` file with your `OPENAI_API_KEY`
+   - Install dependencies: `pip install -r requirements.txt`
+
+2. **Run the application**:
+   ```bash
+   python run_app.py
+   ```
+
+3. **Initialize the agent**:
+   - In the Streamlit sidebar, click "Initialize Agent"
+   - This loads the policy documents into the vector database
+
+4. **Try example queries**:
+   - Policy questions: "What is the expense policy for client meals?"
+   - Ticket creation: "My laptop is broken and needs replacement"
+   - Access requests: "I need access to the internal database"
+
+5. **View created tickets**:
+   - Tickets are saved to `data/tickets.json`
+   - The agent creates tickets with unique IDs and tracks them
 
 ## Contributing
 

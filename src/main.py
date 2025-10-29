@@ -1,0 +1,139 @@
+"""Streamlit application for Enterprise AI Agent."""
+
+import streamlit as st
+import os
+from dotenv import load_dotenv
+import sys
+
+# Add src to path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from src.agent.orchestrator import AgentOrchestrator
+from src.tools.rag_tool import RAGTool
+from src.tools.ticket_tool import TicketTool
+
+# Load environment variables
+load_dotenv()
+
+# Page configuration
+st.set_page_config(
+    page_title="Enterprise AI Agent",
+    page_icon="🤖",
+    layout="wide"
+)
+
+# Initialize session state
+if "agent" not in st.session_state:
+    st.session_state.initialized = False
+    st.session_state.messages = []
+    st.session_state.agent = None
+
+@st.cache_resource
+def initialize_agent():
+    """Initialize the AI agent."""
+    try:
+        # Check for API key
+        if not os.getenv("OPENAI_API_KEY"):
+            return None, "OPENAI_API_KEY not found. Please set it in your .env file."
+        
+        # Initialize tools
+        rag_tool = RAGTool()
+        ticket_tool = TicketTool()
+        
+        # Initialize vector store
+        try:
+            docs_count = rag_tool.initialize_vector_store()
+            st.info(f"✅ Loaded {docs_count} document chunks from policy documents")
+        except Exception as e:
+            return None, f"Error loading documents: {str(e)}"
+        
+        # Initialize agent
+        agent = AgentOrchestrator(rag_tool, ticket_tool)
+        return agent, None
+    except Exception as e:
+        return None, f"Error initializing agent: {str(e)}"
+
+def main():
+    """Main application."""
+    st.title("🤖 Enterprise AI Agent")
+    st.markdown("Ask questions about policies or create helpdesk tickets")
+    st.divider()
+    
+    # Sidebar
+    with st.sidebar:
+        st.header("Configuration")
+        
+        # API Key input
+        api_key = st.text_input(
+            "OpenAI API Key",
+            type="password",
+            value=os.getenv("OPENAI_API_KEY", ""),
+            help="Enter your OpenAI API key"
+        )
+        
+        if api_key and api_key != os.getenv("OPENAI_API_KEY"):
+            os.environ["OPENAI_API_KEY"] = api_key
+            # Clear cache to reinitialize
+            st.cache_resource.clear()
+            st.session_state.agent = None
+            st.session_state.initialized = False
+        
+        st.divider()
+        
+        # Initialize button
+        if st.button("Initialize Agent", type="primary"):
+            with st.spinner("Initializing agent..."):
+                agent, error = initialize_agent()
+                if error:
+                    st.error(error)
+                else:
+                    st.session_state.agent = agent
+                    st.session_state.initialized = True
+                    st.success("Agent initialized successfully!")
+                    st.rerun()
+        
+        # Status
+        if st.session_state.initialized:
+            st.success("✅ Agent Ready")
+        else:
+            st.warning("⚠️ Agent Not Initialized")
+        
+        st.divider()
+        st.markdown("### Example Queries")
+        st.code('"What is the expense policy for client meals?"')
+        st.code('"How do I request vacation time?"')
+        st.code('"My laptop is broken and needs replacement"')
+    
+    # Main chat interface
+    if not st.session_state.initialized:
+        st.info("👈 Please initialize the agent using the sidebar to get started.")
+        return
+    
+    # Display chat history
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    
+    # Chat input
+    if prompt := st.chat_input("Ask a question or request help..."):
+        # Add user message
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        
+        # Get agent response
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                try:
+                    result = st.session_state.agent.process(prompt)
+                    response = result["response"]
+                    st.markdown(response)
+                    st.session_state.messages.append({"role": "assistant", "content": response})
+                except Exception as e:
+                    error_msg = f"Error: {str(e)}"
+                    st.error(error_msg)
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+
+if __name__ == "__main__":
+    main()
+

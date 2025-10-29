@@ -1,0 +1,38 @@
+IT EQUIPMENT AND SOFTWARE POLICY
+
+1. Equipment Requests
+   - Submit ticket through helpdesk portal or email IT@company.com
+   - Standard equipment: Laptop, monitor, keyboard, mouse
+   - Non-standard items require business justification
+   - Approval timeline: 2-5 business days for standard requests
+
+2. Hardware Standards
+   - Laptops: Windows/Mac based on role requirements
+   - Monitors: Up to 2 monitors per workstation
+   - Replacement cycle: 3-4 years for laptops, 5 years for monitors
+   - Broken equipment: Same-day replacement service available
+
+3. Software License Requests
+   - List required software with business justification
+   - Department head approval required for costs over $500/year
+   - Free/open-source software: IT approval only
+   - Commercial software: Requires license review
+
+4. Access Requests
+   - Database access: Requires manager and IT security approval
+   - Server access: Requires VP-level approval and security training
+   - Application access: Standard requests processed within 24 hours
+   - New employee setup: Completed before first day
+
+5. Bring Your Own Device (BYOD)
+   - Personal devices allowed for standard office work
+   - Must install company security software
+   - IT support limited for personal devices
+   - Company liable for company-owned equipment only
+
+6. Return Policy
+   - All equipment must be returned upon termination
+   - Damage assessment before replacement
+   - Lost equipment: Employee responsible for replacement cost
+   - Data must be wiped before return or disposal
+
