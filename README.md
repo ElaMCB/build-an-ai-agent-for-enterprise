@@ -46,7 +46,7 @@ User Input -> Agent Orchestrator -> Intent Recognition -> Tool Execution -> Resp
 ### Prerequisites
 
 - Python 3.9 or higher
-- OpenAI API key
+- API key from OpenAI or DeepSeek (DeepSeek recommended - includes free tier)
 - Git
 
 ### Local Development
@@ -77,7 +77,9 @@ Copy-Item .env.example .env
 # On Linux/Mac:
 cp .env.example .env
 
-# Then edit .env and add your OPENAI_API_KEY
+# Then edit .env and add your API key:
+# For OpenAI: OPENAI_API_KEY=sk-your-key
+# For DeepSeek: DEEPSEEK_API_KEY=sk-your-key
 ```
 
 5. **Run the application**:

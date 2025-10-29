@@ -32,8 +32,12 @@ if "agent" not in st.session_state:
 def initialize_agent():
     """Initialize the AI agent."""
     try:
-        # Check for API key
-        if not os.getenv("OPENAI_API_KEY"):
+        # Check for API key (OpenAI or DeepSeek)
+        from src.utils.llm_config import get_llm_provider
+        provider = get_llm_provider()
+        if provider == "deepseek" and not os.getenv("DEEPSEEK_API_KEY"):
+            return None, "DEEPSEEK_API_KEY not found. Please set it in your .env file."
+        elif provider == "openai" and not os.getenv("OPENAI_API_KEY"):
             return None, "OPENAI_API_KEY not found. Please set it in your .env file."
         
         # Initialize tools
@@ -63,16 +67,38 @@ def main():
     with st.sidebar:
         st.header("Configuration")
         
-        # API Key input
-        api_key = st.text_input(
-            "OpenAI API Key",
-            type="password",
-            value=os.getenv("OPENAI_API_KEY", ""),
-            help="Enter your OpenAI API key"
+        # Provider selection
+        from src.utils.llm_config import get_llm_provider, get_provider_name
+        provider_options = ["OpenAI", "DeepSeek"]
+        default_provider = "DeepSeek" if get_llm_provider() == "deepseek" else "OpenAI"
+        
+        selected_provider = st.selectbox(
+            "LLM Provider",
+            provider_options,
+            index=0 if default_provider == "OpenAI" else 1,
+            help="Select your LLM provider"
         )
         
-        if api_key and api_key != os.getenv("OPENAI_API_KEY"):
-            os.environ["OPENAI_API_KEY"] = api_key
+        # API Key input
+        api_key_name = "DEEPSEEK_API_KEY" if selected_provider == "DeepSeek" else "OPENAI_API_KEY"
+        api_key_label = f"{selected_provider} API Key"
+        api_key = st.text_input(
+            api_key_label,
+            type="password",
+            value=os.getenv(api_key_name, ""),
+            help=f"Enter your {selected_provider} API key"
+        )
+        
+        if api_key and api_key != os.getenv(api_key_name):
+            # Clear the other provider's key
+            if selected_provider == "DeepSeek":
+                os.environ["DEEPSEEK_API_KEY"] = api_key
+                if "OPENAI_API_KEY" in os.environ:
+                    del os.environ["OPENAI_API_KEY"]
+            else:
+                os.environ["OPENAI_API_KEY"] = api_key
+                if "DEEPSEEK_API_KEY" in os.environ:
+                    del os.environ["DEEPSEEK_API_KEY"]
             # Clear cache to reinitialize
             st.cache_resource.clear()
             st.session_state.agent = None
@@ -94,7 +120,8 @@ def main():
         
         # Status
         if st.session_state.initialized:
-            st.success("✅ Agent Ready")
+            provider_name = get_provider_name()
+            st.success(f"✅ Agent Ready ({provider_name})")
         else:
             st.warning("⚠️ Agent Not Initialized")
         

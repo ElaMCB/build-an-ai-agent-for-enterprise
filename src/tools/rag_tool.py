@@ -2,11 +2,10 @@
 
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
-from langchain_openai import ChatOpenAI
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
+from src.utils.llm_config import get_embeddings, get_chat_llm
 import os
 from typing import List
 
@@ -16,7 +15,7 @@ class RAGTool:
     
     def __init__(self, vector_store_path: str = "./data/vector_db"):
         self.vector_store_path = vector_store_path
-        self.embeddings = OpenAIEmbeddings()
+        self.embeddings = get_embeddings()
         self.vector_store = None
         self.qa_chain = None
         
@@ -65,7 +64,7 @@ class RAGTool:
             input_variables=["context", "question"]
         )
         
-        llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+        llm = get_chat_llm(model="gpt-4o-mini", temperature=0)
         
         self.qa_chain = RetrievalQA.from_chain_type(
             llm=llm,

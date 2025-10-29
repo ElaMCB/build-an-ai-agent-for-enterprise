@@ -1,9 +1,9 @@
 """Agent orchestrator implementing ReAct pattern."""
 
-from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain.prompts import PromptTemplate
 from langchain.tools import StructuredTool
+from src.utils.llm_config import get_chat_llm
 from typing import Dict, Any
 import os
 
@@ -63,11 +63,8 @@ Question: {input}
 Thought: {agent_scratchpad}
 """)
         
-        # Initialize LLM
-        llm = ChatOpenAI(
-            model="gpt-4o-mini",
-            temperature=0
-        )
+        # Initialize LLM (supports OpenAI or DeepSeek)
+        llm = get_chat_llm(model="gpt-4o-mini", temperature=0)
         
         # Create agent
         agent = create_react_agent(llm, tools, prompt)
