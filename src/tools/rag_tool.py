@@ -3,8 +3,6 @@
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain.chains import RetrievalQA
-from langchain.prompts import PromptTemplate
 from src.utils.llm_config import get_embeddings, get_chat_llm
 import os
 from typing import List
@@ -17,7 +15,7 @@ class RAGTool:
         self.vector_store_path = vector_store_path
         self.embeddings = get_embeddings()
         self.vector_store = None
-        self.qa_chain = None
+        self.retriever = None
         
     def initialize_vector_store(self, documents_path: str = "./data/policies"):
         """Initialize the vector store with policy documents."""
@@ -48,46 +46,45 @@ class RAGTool:
         )
         # Save FAISS index
         self.vector_store.save_local(self.vector_store_path)
-        
-        # Create QA chain
-        template = """You are a helpful assistant that answers questions about company policies.
-        Use the following pieces of context to answer the question. If you don't know the answer,
-        just say that you don't know, don't try to make up an answer.
-        
-        Context: {context}
-        
-        Question: {question}
-        
-        Answer:"""
-        
-        prompt = PromptTemplate(
-            template=template,
-            input_variables=["context", "question"]
-        )
-        
-        llm = get_chat_llm(model="gpt-4o-mini", temperature=0)
-        
-        self.qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=self.vector_store.as_retriever(search_kwargs={"k": 3}),
-            chain_type_kwargs={"prompt": prompt},
-            return_source_documents=True
-        )
+        # Create retriever
+        self.retriever = self.vector_store.as_retriever(search_kwargs={"k": 3})
         
         return len(splits)
     
     def query(self, question: str) -> dict:
-        """Query the knowledge base."""
-        if not self.qa_chain:
-            # Lazy initialization
-            self.initialize_vector_store()
-        
-        result = self.qa_chain.invoke({"query": question})
-        
+        """Query the knowledge base without langchain.chains dependency."""
+        # Ensure vector store / retriever
+        if self.vector_store is None or self.retriever is None:
+            # Load existing FAISS index if available; otherwise initialize
+            if os.path.exists(self.vector_store_path) and os.listdir(self.vector_store_path):
+                self.vector_store = FAISS.load_local(
+                    self.vector_store_path,
+                    self.embeddings,
+                    allow_dangerous_deserialization=True,
+                )
+                self.retriever = self.vector_store.as_retriever(search_kwargs={"k": 3})
+            else:
+                self.initialize_vector_store()
+
+        # Retrieve relevant documents
+        docs = self.retriever.get_relevant_documents(question)
+        context = "\n\n".join(d.page_content for d in docs)
+
+        # Build prompt and call LLM directly
+        prompt_text = (
+            "You are a helpful assistant that answers questions about company policies.\n"
+            "Use the following context to answer the question. If you don't know, say you don't know.\n\n"
+            f"Context:\n{context}\n\n"
+            f"Question: {question}\n\n"
+            "Answer:"
+        )
+        llm = get_chat_llm(model="gpt-4o-mini", temperature=0)
+        response = llm.invoke(prompt_text)
+        answer = getattr(response, "content", None) or str(response)
+
         return {
-            "answer": result["result"],
-            "sources": [doc.metadata.get("source", "Unknown") for doc in result.get("source_documents", [])]
+            "answer": answer,
+            "sources": [d.metadata.get("source", "Unknown") for d in docs],
         }
     
     def get_tool_description(self) -> str:
