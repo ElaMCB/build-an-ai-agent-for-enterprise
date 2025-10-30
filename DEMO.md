@@ -48,7 +48,7 @@ This will open Streamlit in your browser (usually at `http://localhost:8501`).
 
 **Expected Behavior**:
 - Agent uses the `policy_query` tool
-- Searches the knowledge base (ChromaDB vector store)
+- Searches the knowledge base (FAISS vector store)
 - Returns specific information from expense_policy.txt
 - Shows source documents
 

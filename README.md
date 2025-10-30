@@ -36,7 +36,7 @@ User Input -> Agent Orchestrator -> Intent Recognition -> Tool Execution -> Resp
 
 - **Language**: Python 3.9+
 - **AI Framework**: LangChain for agent orchestration
-- **Vector Database**: ChromaDB for document retrieval
+- **Vector Database**: FAISS for document retrieval
 - **Frontend**: Streamlit for user interface
 - **API Layer**: FastAPI for service endpoints
 - **Deployment**: Docker containerization

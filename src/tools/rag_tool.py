@@ -2,7 +2,7 @@
 
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 from src.utils.llm_config import get_embeddings, get_chat_llm
@@ -41,12 +41,13 @@ class RAGTool:
         )
         splits = text_splitter.split_documents(documents)
         
-        # Create vector store
-        self.vector_store = Chroma.from_documents(
+        # Create vector store (using FAISS for better Windows compatibility)
+        self.vector_store = FAISS.from_documents(
             documents=splits,
-            embedding=self.embeddings,
-            persist_directory=self.vector_store_path
+            embedding=self.embeddings
         )
+        # Save FAISS index
+        self.vector_store.save_local(self.vector_store_path)
         
         # Create QA chain
         template = """You are a helpful assistant that answers questions about company policies.
