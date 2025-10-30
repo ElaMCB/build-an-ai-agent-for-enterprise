@@ -27,16 +27,18 @@ User Input -> Agent Orchestrator -> Intent Recognition -> Tool Execution -> Resp
 
 ### Core Components
 
-- **Agent Orchestrator**: Central controller implementing ReAct pattern for reasoning and tool selection
-- **RAG Module**: Vector-based retrieval from policy documents with semantic search
+- **Orchestrator**: Lightweight intent router that directs requests to RAG or ticket tool
+- **RAG Module**: FAISS + TF‑IDF retrieval over policy documents with semantic-style search
 - **Tool Framework**: Extensible system for API integrations and external actions
-- **Knowledge Base**: Document processing pipeline with chunking and embedding storage
+- **Knowledge Base**: Simple .txt ingestion with local chunking; file‑backed index
 
 ## Technical Stack
 
 - **Language**: Python 3.9+
-- **AI Framework**: LangChain for agent orchestration
-- **Vector Database**: FAISS for document retrieval
+- **LLM Provider (default)**: DeepSeek (`deepseek-chat`) via HTTP API
+- **LLM Provider (optional)**: OpenAI (`gpt-4o-mini`) via HTTP API
+- **RAG Vector Store**: FAISS (in‑process, file‑backed)
+- **Embeddings**: TF‑IDF (scikit‑learn) by default; OpenAI embeddings optional
 - **Frontend**: Streamlit for user interface
 - **API Layer**: FastAPI for service endpoints
 - **Deployment**: Docker containerization
@@ -46,7 +48,7 @@ User Input -> Agent Orchestrator -> Intent Recognition -> Tool Execution -> Resp
 ### Prerequisites
 
 - Python 3.9 or higher
-- API key from OpenAI or DeepSeek (DeepSeek recommended - includes free tier)
+- DeepSeek API key (recommended) or OpenAI API key
 - Git
 
 ### Local Development
@@ -77,9 +79,9 @@ Copy-Item .env.example .env
 # On Linux/Mac:
 cp .env.example .env
 
-# Then edit .env and add your API key:
-# For OpenAI: OPENAI_API_KEY=sk-your-key
-# For DeepSeek: DEEPSEEK_API_KEY=sk-your-key
+# Then edit .env and add your API key (DeepSeek preferred):
+# DeepSeek (preferred): DEEPSEEK_API_KEY=sk-your-key
+# OpenAI (optional):    OPENAI_API_KEY=sk-your-key
 ```
 
 5. **Run the application**:
@@ -194,7 +196,7 @@ The application uses environment variables for configuration:
 ## Demo Instructions
 
 1. **Set up your environment**:
-   - Create `.env` file with your `OPENAI_API_KEY`
+   - Create `.env` with your `DEEPSEEK_API_KEY` (or `OPENAI_API_KEY`)
    - Install dependencies: `pip install -r requirements.txt`
 
 2. **Run the application**:
@@ -203,8 +205,8 @@ The application uses environment variables for configuration:
    ```
 
 3. **Initialize the agent**:
-   - In the Streamlit sidebar, click "Initialize Agent"
-   - This loads the policy documents into the vector database
+   - In the Streamlit sidebar, choose provider (DeepSeek/OpenAI) and click "Initialize Agent"
+   - This loads policy documents and builds/loads the FAISS index
 
 4. **Try example queries**:
    - Policy questions: "What is the expense policy for client meals?"
