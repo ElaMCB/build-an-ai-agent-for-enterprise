@@ -1,9 +1,9 @@
-"""RAG Tool for policy information retrieval (no heavy deps)."""
+"""RAG Tool for policy information retrieval (Windows-friendly, no heavy deps)."""
 
-from langchain_community.vectorstores import FAISS
-from src.utils.llm_config import get_embeddings, get_chat_llm
 import os
 from typing import List, Tuple
+import numpy as np
+from src.utils.llm_config import get_embeddings, get_chat_llm
 
 
 class RAGTool:
@@ -12,8 +12,9 @@ class RAGTool:
     def __init__(self, vector_store_path: str = "./data/vector_db"):
         self.vector_store_path = vector_store_path
         self.embeddings = get_embeddings()
-        self.vector_store = None
-        self.retriever = None
+        self.texts: List[str] = []
+        self.metadatas: List[dict] = []
+        self.doc_vectors: np.ndarray | None = None
         
     def initialize_vector_store(self, documents_path: str = "./data/policies"):
         """Initialize the vector store with policy documents (manual loader/splitter)."""
@@ -21,16 +22,11 @@ class RAGTool:
         if not texts:
             raise ValueError(f"No documents found in {documents_path}")
 
-        # Create vector store (using FAISS for better Windows compatibility)
-        self.vector_store = FAISS.from_texts(
-            texts=texts,
-            embedding=self.embeddings,
-            metadatas=metadatas
-        )
-        # Save FAISS index
-        self.vector_store.save_local(self.vector_store_path)
-        # Ready for similarity search
-        self.retriever = None
+        # Build in-memory TF-IDF matrix (no FAISS/torch/onnx)
+        self.texts = texts
+        self.metadatas = metadatas
+        vectors = self.embeddings.embed_documents(texts)
+        self.doc_vectors = np.asarray(vectors, dtype=np.float32)
 
     def _load_and_chunk_documents(self, documents_path: str) -> Tuple[List[str], List[dict]]:
         """Load .txt files and chunk them into overlapping segments."""
@@ -60,26 +56,23 @@ class RAGTool:
                 except Exception:
                     continue
         return texts, metadatas
-        
-        return len(splits)
     
     def query(self, question: str) -> dict:
         """Query the knowledge base without langchain.chains dependency."""
-        # Ensure vector store
-        if self.vector_store is None:
-            # Load existing FAISS index if available; otherwise initialize
-            if os.path.exists(self.vector_store_path) and os.listdir(self.vector_store_path):
-                self.vector_store = FAISS.load_local(
-                    self.vector_store_path,
-                    self.embeddings,
-                    allow_dangerous_deserialization=True,
-                )
-            else:
-                self.initialize_vector_store()
+        # Ensure index
+        if self.doc_vectors is None or len(self.texts) == 0:
+            self.initialize_vector_store()
 
-        # Retrieve relevant documents
-        docs = self.vector_store.similarity_search(question, k=3)
-        context = "\n\n".join(d.page_content for d in docs)
+        # Retrieve relevant documents using cosine similarity
+        qvec = np.asarray(self.embeddings.embed_query(question), dtype=np.float32)
+        doc_mat = self.doc_vectors  # shape: (n_docs, dim)
+        # Cosine similarity = (A·B) / (||A|| ||B||)
+        doc_norms = np.linalg.norm(doc_mat, axis=1) + 1e-8
+        qnorm = np.linalg.norm(qvec) + 1e-8
+        sims = (doc_mat @ qvec) / (doc_norms * qnorm)
+        top_k = int(min(3, sims.shape[0]))
+        top_idx = np.argsort(-sims)[:top_k]
+        context = "\n\n".join(self.texts[i] for i in top_idx)
 
         # Build prompt and call LLM directly
         prompt_text = (
@@ -95,7 +88,7 @@ class RAGTool:
 
         return {
             "answer": answer,
-            "sources": [d.metadata.get("source", "Unknown") for d in docs],
+            "sources": [self.metadatas[i].get("source", "Unknown") for i in top_idx],
         }
     
     def get_tool_description(self) -> str:

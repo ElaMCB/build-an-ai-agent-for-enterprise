@@ -18,20 +18,56 @@ def get_llm_provider() -> str:
 
 
 class SimpleChatLLM:
-    """Minimal chat interface with invoke(prompt_text) -> str using OpenAI SDK."""
+    """Minimal chat interface with invoke(prompt_text) -> str using OpenAI-compatible SDK."""
 
-    def __init__(self, model: str, temperature: float, base_url: Optional[str], api_key: str):
+    def __init__(
+        self,
+        model: str,
+        temperature: float,
+        base_url: Optional[str],
+        api_key: str,
+        provider: str,
+    ):
         self.model = model
         self.temperature = temperature
+        self.provider = provider
+        # DeepSeek requires full URL with /v1
+        if provider == "deepseek" and base_url:
+            if not base_url.endswith("/v1"):
+                base_url = base_url.rstrip("/") + "/v1"
         self.client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
 
     def invoke(self, prompt_text: str):
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt_text}],
-            temperature=self.temperature,
-        )
-        return response.choices[0].message.content
+        """Invoke the LLM with automatic model fallback for DeepSeek."""
+        # Try available DeepSeek models in order if current fails
+        models_to_try = [self.model]
+        if self.provider == "deepseek":
+            # Common DeepSeek model names
+            fallbacks = ["deepseek-chat", "deepseek-reasoner"]
+            models_to_try.extend([m for m in fallbacks if m != self.model])
+        
+        last_error = None
+        for model_name in models_to_try:
+            try:
+                response = self.client.chat.completions.create(
+                    model=model_name,
+                    messages=[{"role": "user", "content": prompt_text}],
+                    temperature=self.temperature,
+                )
+                # Success - update model for next time
+                if model_name != self.model:
+                    self.model = model_name
+                return response.choices[0].message.content
+            except Exception as e:
+                last_error = e
+                error_str = str(e).lower()
+                # If it's not a model error, don't try other models
+                if "model" not in error_str and "not exist" not in error_str:
+                    raise
+                continue
+        
+        # All models failed
+        raise Exception(f"DeepSeek API error with all models: {last_error}")
 
 
 def get_chat_llm(model: Optional[str] = None, temperature: float = 0):
@@ -39,13 +75,16 @@ def get_chat_llm(model: Optional[str] = None, temperature: float = 0):
     provider = get_llm_provider()
     if provider == "deepseek":
         api_key = os.getenv("DEEPSEEK_API_KEY", "")
+        if not api_key:
+            raise ValueError("DEEPSEEK_API_KEY not found in environment")
         base_url = "https://api.deepseek.com/v1"
-        default_model = model or "deepseek-chat"
-        return SimpleChatLLM(default_model, temperature, base_url, api_key)
+        # Default model - try common names
+        default_model = model or os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+        return SimpleChatLLM(default_model, temperature, base_url, api_key, provider="deepseek")
     else:
         api_key = os.getenv("OPENAI_API_KEY", "")
         default_model = model or "gpt-4o-mini"
-        return SimpleChatLLM(default_model, temperature, None, api_key)
+        return SimpleChatLLM(default_model, temperature, None, api_key, provider="openai")
 
 
 class SklearnTfidfEmbeddings:
@@ -82,4 +121,3 @@ def get_embeddings():
 def get_provider_name() -> str:
     """Get the current provider name."""
     return get_llm_provider().upper()
-

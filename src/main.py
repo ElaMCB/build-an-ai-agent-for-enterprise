@@ -46,8 +46,8 @@ def initialize_agent():
         
         # Initialize vector store
         try:
-            docs_count = rag_tool.initialize_vector_store()
-            st.info(f"✅ Loaded {docs_count} document chunks from policy documents")
+            rag_tool.initialize_vector_store()
+            st.info("✅ Policy index initialized (FAISS + TF‑IDF)")
         except Exception as e:
             return None, f"Error loading documents: {str(e)}"
         
@@ -117,6 +117,18 @@ def main():
                     st.session_state.initialized = True
                     st.success("Agent initialized successfully!")
                     st.rerun()
+
+        # Rebuild index
+        if st.button("Rebuild Policy Index"):
+            try:
+                # Clear resource cache to force rebuild
+                st.cache_resource.clear()
+                if st.session_state.agent:
+                    # Rebuild directly if agent exists
+                    st.session_state.agent.rag_tool.initialize_vector_store()
+                st.success("Rebuilt policy index successfully.")
+            except Exception as e:
+                st.error(f"Failed to rebuild index: {e}")
         
         # Status
         if st.session_state.initialized:
