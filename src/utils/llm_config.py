@@ -1,8 +1,10 @@
-"""LLM configuration utility for supporting multiple providers."""
+"""LLM configuration utility for supporting multiple providers without heavy deps."""
 
 import os
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from typing import Optional
+from typing import Optional, List
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from openai import OpenAI
 
 
 def get_llm_provider() -> str:
@@ -15,53 +17,66 @@ def get_llm_provider() -> str:
         return "openai"  # default
 
 
+class SimpleChatLLM:
+    """Minimal chat interface with invoke(prompt_text) -> str using OpenAI SDK."""
+
+    def __init__(self, model: str, temperature: float, base_url: Optional[str], api_key: str):
+        self.model = model
+        self.temperature = temperature
+        self.client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
+
+    def invoke(self, prompt_text: str):
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt_text}],
+            temperature=self.temperature,
+        )
+        return response.choices[0].message.content
+
+
 def get_chat_llm(model: Optional[str] = None, temperature: float = 0):
-    """Get a ChatOpenAI instance configured for the selected provider."""
+    """Get a lightweight chat client for the selected provider (OpenAI/DeepSeek)."""
     provider = get_llm_provider()
-    
     if provider == "deepseek":
-        api_key = os.getenv("DEEPSEEK_API_KEY")
-        # DeepSeek API endpoint
+        api_key = os.getenv("DEEPSEEK_API_KEY", "")
         base_url = "https://api.deepseek.com/v1"
-        # DeepSeek model names: deepseek-chat, deepseek-coder
         default_model = model or "deepseek-chat"
-        
-        return ChatOpenAI(
-            model=default_model,
-            temperature=temperature,
-            openai_api_key=api_key,
-            openai_api_base=base_url
-        )
+        return SimpleChatLLM(default_model, temperature, base_url, api_key)
     else:
-        # OpenAI
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("OPENAI_API_KEY", "")
         default_model = model or "gpt-4o-mini"
-        
-        return ChatOpenAI(
-            model=default_model,
-            temperature=temperature,
-            openai_api_key=api_key
-        )
+        return SimpleChatLLM(default_model, temperature, None, api_key)
+
+
+class SklearnTfidfEmbeddings:
+    """Lightweight embeddings using scikit-learn TF-IDF (CPU-only, no native DLLs).
+    Provides an interface compatible with LangChain's Embeddings (embed_documents/query).
+    """
+
+    def __init__(self):
+        self.vectorizer: Optional[TfidfVectorizer] = None
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        # Fit vectorizer on the documents and produce dense vectors
+        self.vectorizer = TfidfVectorizer(max_features=4096)
+        matrix = self.vectorizer.fit_transform(texts)
+        dense = matrix.astype(np.float32).toarray()
+        return dense.tolist()
+
+    def embed_query(self, text: str) -> List[float]:
+        if self.vectorizer is None:
+            # Cold start: fit on the query itself to avoid crashes; vector will be trivial
+            self.vectorizer = TfidfVectorizer(max_features=4096)
+            matrix = self.vectorizer.fit_transform([text])
+        else:
+            matrix = self.vectorizer.transform([text])
+        dense = matrix.astype(np.float32).toarray()[0]
+        return dense.tolist()
 
 
 def get_embeddings():
-    """Get embeddings instance. 
-    Note: For DeepSeek, we use OpenAI-compatible embeddings.
-    The embeddings are for vector search and don't need to match the chat model provider."""
-    # Check for OpenAI API key first (for embeddings)
-    openai_key = os.getenv("OPENAI_API_KEY")
-    if openai_key:
-        return OpenAIEmbeddings(openai_api_key=openai_key)
-    
-    # If no OpenAI key, try using DeepSeek key (may not work for embeddings)
-    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
-    if deepseek_key:
-        # Try using DeepSeek key with OpenAI embeddings API
-        # This may not work - user should have OpenAI key for embeddings
-        return OpenAIEmbeddings(openai_api_key=deepseek_key)
-    
-    # Default fallback
-    return OpenAIEmbeddings()
+    # Use pure scikit-learn TF-IDF embeddings to avoid torch/onnxruntime
+    return SklearnTfidfEmbeddings()
 
 
 def get_provider_name() -> str:

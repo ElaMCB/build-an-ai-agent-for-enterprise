@@ -1,11 +1,9 @@
-"""RAG Tool for policy information retrieval."""
+"""RAG Tool for policy information retrieval (no heavy deps)."""
 
-from langchain_community.document_loaders import TextLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from src.utils.llm_config import get_embeddings, get_chat_llm
 import os
-from typing import List
+from typing import List, Tuple
 
 
 class RAGTool:
@@ -18,43 +16,57 @@ class RAGTool:
         self.retriever = None
         
     def initialize_vector_store(self, documents_path: str = "./data/policies"):
-        """Initialize the vector store with policy documents."""
-        # Load documents
-        documents = []
-        for filename in os.listdir(documents_path):
-            if filename.endswith('.txt'):
-                file_path = os.path.join(documents_path, filename)
-                loader = TextLoader(file_path, encoding='utf-8')
-                docs = loader.load()
-                documents.extend(docs)
-        
-        if not documents:
+        """Initialize the vector store with policy documents (manual loader/splitter)."""
+        texts, metadatas = self._load_and_chunk_documents(documents_path)
+        if not texts:
             raise ValueError(f"No documents found in {documents_path}")
-        
-        # Split documents into chunks
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len,
-        )
-        splits = text_splitter.split_documents(documents)
-        
+
         # Create vector store (using FAISS for better Windows compatibility)
-        self.vector_store = FAISS.from_documents(
-            documents=splits,
-            embedding=self.embeddings
+        self.vector_store = FAISS.from_texts(
+            texts=texts,
+            embedding=self.embeddings,
+            metadatas=metadatas
         )
         # Save FAISS index
         self.vector_store.save_local(self.vector_store_path)
-        # Create retriever
-        self.retriever = self.vector_store.as_retriever(search_kwargs={"k": 3})
+        # Ready for similarity search
+        self.retriever = None
+
+    def _load_and_chunk_documents(self, documents_path: str) -> Tuple[List[str], List[dict]]:
+        """Load .txt files and chunk them into overlapping segments."""
+        def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
+            chunks = []
+            start = 0
+            n = len(text)
+            while start < n:
+                end = min(start + chunk_size, n)
+                chunks.append(text[start:end])
+                if end == n:
+                    break
+                start = max(end - overlap, 0)
+            return chunks
+
+        texts: List[str] = []
+        metadatas: List[dict] = []
+        for filename in os.listdir(documents_path):
+            if filename.endswith('.txt'):
+                file_path = os.path.join(documents_path, filename)
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    for chunk in chunk_text(content):
+                        texts.append(chunk)
+                        metadatas.append({"source": file_path})
+                except Exception:
+                    continue
+        return texts, metadatas
         
         return len(splits)
     
     def query(self, question: str) -> dict:
         """Query the knowledge base without langchain.chains dependency."""
-        # Ensure vector store / retriever
-        if self.vector_store is None or self.retriever is None:
+        # Ensure vector store
+        if self.vector_store is None:
             # Load existing FAISS index if available; otherwise initialize
             if os.path.exists(self.vector_store_path) and os.listdir(self.vector_store_path):
                 self.vector_store = FAISS.load_local(
@@ -62,12 +74,11 @@ class RAGTool:
                     self.embeddings,
                     allow_dangerous_deserialization=True,
                 )
-                self.retriever = self.vector_store.as_retriever(search_kwargs={"k": 3})
             else:
                 self.initialize_vector_store()
 
         # Retrieve relevant documents
-        docs = self.retriever.get_relevant_documents(question)
+        docs = self.vector_store.similarity_search(question, k=3)
         context = "\n\n".join(d.page_content for d in docs)
 
         # Build prompt and call LLM directly
